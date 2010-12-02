@@ -21,6 +21,7 @@ struct client {
   bool close;
   struct list_head next_auth;
   struct list_head next;
+  uint8_t method;
   union {
     struct {
       char uname[256];
@@ -36,5 +37,6 @@ Client *client_new(SocksLink *sl, int fd, struct sockaddr_storage *addr,
 void client_disconnect(Client *cl);
 void client_drop(Client *cl);
 void client_start_stream(Client *cl);
+void client_auth_username_successful(Client *cl);
 
 #endif /* !CLIENT_H */

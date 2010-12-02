@@ -9,25 +9,6 @@
 #include "log.h"
 #include "config.h"
 
-static void client_connect_server(Client *cl)
-{
-  SocksLink *sl = cl->parent;
-
-  if (!sl->helper.cmd) {
-    server_connect(cl, &sl->nexthop_addr, sl->nexthop_addrlen);
-  } else {
-    /* FIXME ask helper: timeout, helper died, ...*/
-  }
-}
-
-static void client_invalid_version(Client *cl)
-{
-  static const uint8_t response[] = {SOCKS5_VER, AUTH_METHOD_INVALID};
-
-  bufferevent_write(cl->client.bufev, response, 2);
-  client_disconnect(cl);
-}
-
 static void on_client_event(struct bufferevent *bev, short why, void *ctx)
 {
   Client *cl = ctx;
@@ -54,6 +35,47 @@ static void on_client_write(struct bufferevent *bev, void *ctx)
 
   if (cl->close)
     client_drop(cl);
+}
+
+static void on_client_read_dummy(struct bufferevent *bev, void *ctx)
+{
+  (void) bev;
+  (void) ctx;
+}
+
+static void client_connect_server(Client *cl)
+{
+  SocksLink *sl = cl->parent;
+
+  /*
+   * If the client is dummy, he may send data before receiving authentication
+   * result, we must keep data by setting a very low high-watermark with a dummy
+   * callback
+   */
+  bufferevent_setcb(cl->client.bufev, on_client_read_dummy,
+		    on_client_write, on_client_event, cl);
+  bufferevent_setwatermark(cl->client.bufev, EV_READ, 0, 1);
+
+  if (!sl->helper.cmd) {
+    server_connect(cl, &sl->nexthop_addr, sl->nexthop_addrlen);
+  } else {
+    /* FIXME ask helper: timeout, helper died, ...*/
+  }
+}
+
+static void client_invalid_version(Client *cl)
+{
+  static const uint8_t message[] = {SOCKS5_VER, AUTH_METHOD_INVALID};
+
+  bufferevent_write(cl->client.bufev, message, sizeof (message));
+  client_disconnect(cl);
+}
+
+void client_auth_username_successful(Client *cl)
+{
+  static const uint8_t message[] = {0x01, 0x00};
+
+  bufferevent_write(cl->client.bufev, message, sizeof (message));
 }
 
 static void on_client_read_auth_username(struct bufferevent *bev, void *ctx)
@@ -92,7 +114,7 @@ static void on_client_read_auth_username(struct bufferevent *bev, void *ctx)
   prcl_trace(cl, "user: %s, passwd: %s", cl->auth.username.uname,
 	     cl->auth.username.passwd);
 
-  evbuffer_drain(bev->input, 2 + ulen + 1 + plen);
+  evbuffer_drain(EVBUFFER_INPUT(bev), 2 + ulen + 1 + plen);
 
   client_connect_server(cl);
 }
@@ -154,27 +176,39 @@ static void on_client_read_init(struct bufferevent *bev, void *ctx)
     prcl_debug(cl, "using 0x%.2x authentication method", method);
   }
 
+  evbuffer_drain(bev->input, 2 + nmeth);
+
+  cl->method = method;
+
   if (method == AUTH_METHOD_INVALID)
-    cl->close = true;
+    client_disconnect(cl);
   else if (method == AUTH_METHOD_NONE)
     client_connect_server(cl);
-  else if (method == AUTH_METHOD_USERNAME)
+  else if (method == AUTH_METHOD_USERNAME) {
     bufferevent_setcb(cl->client.bufev, on_client_read_auth_username,
 		      on_client_write, on_client_event, cl);
 
-  bufferevent_write(cl->client.bufev, (uint8_t []){SOCKS5_VER, method}, 2);
+    /* there is still data available in the buffer, call next callback */
+    if (EVBUFFER_LENGTH(EVBUFFER_INPUT(bev)))
+      on_client_read_auth_username(bev, cl);
+  }
 
-  evbuffer_drain(bev->input, 2 + nmeth);
+  bufferevent_write(cl->client.bufev, (uint8_t []){SOCKS5_VER, method}, 2);
 }
 
 void client_start_stream(Client *cl)
 {
-  bufferevent_disable(cl->client.bufev, EV_READ | EV_WRITE);
-  bufferevent_settimeout(cl->client.bufev, SOCKS_IO_TIMEOUT, SOCKS_IO_TIMEOUT);
-  bufferevent_setwatermark(cl->server.bufev, EV_READ, 0, SOCKS_STREAM_BUFSIZ);
-  bufferevent_setcb(cl->client.bufev, on_client_read_stream,
-		    on_client_write, on_client_event, cl);
-  bufferevent_enable(cl->client.bufev, EV_READ | EV_WRITE);
+  struct bufferevent *bev = cl->client.bufev;
+
+  bufferevent_disable(bev, EV_READ | EV_WRITE);
+  bufferevent_settimeout(bev, SOCKS_IO_TIMEOUT, SOCKS_IO_TIMEOUT);
+  bufferevent_setwatermark(bev, EV_READ, 0, SOCKS_STREAM_BUFSIZ);
+  bufferevent_setcb(bev, on_client_read_stream, on_client_write, on_client_event, cl);
+  bufferevent_enable(bev, EV_READ | EV_WRITE);
+
+  /* there is still data available in the buffer, call next callback */
+  if (EVBUFFER_LENGTH(EVBUFFER_INPUT(bev)))
+    on_client_read_stream(bev, cl);
 }
 
 Client *client_new(SocksLink *sl, int fd, struct sockaddr_storage *addr,
@@ -227,6 +261,7 @@ void client_disconnect(Client *cl)
     client_drop(cl);
 }
 
+/* Disconnect and remove the client *NOW* */
 void client_drop(Client *cl)
 {
   if (!cl)
