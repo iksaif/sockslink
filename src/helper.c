@@ -34,7 +34,7 @@ static int helper_kill(Helper *helper)
       return 0;
 
     /* try to let the helper finish its stuff */
-    usleep(100);
+    usleep(200);
   }
 
   /*
@@ -48,8 +48,10 @@ static int helper_kill(Helper *helper)
     return 0;
 
   pid = waitpid(helper->pid, &status, WNOHANG);
+
   if (pid == helper->pid)
     return 0;
+
   return -1;
 }
 
@@ -72,25 +74,22 @@ static int helper_stop(Helper *helper)
     client_disconnect(client);
 
   if (!helper->dying && helper->pid > 0) {
-    if (helper_kill(helper)) {
-      /* re-add helper to helper list so SIGCHLD handler can remove it later */
-      list_add(&helper->next, &helper->parent->helpers);
-      return -1;
-    }
+    if (helper_kill(helper))
+      pr_err(sl, "helper[%d] can't be killed ?!?", helper->pid);
   }
 
   if (helper->bufev_in) {
-    bufferevent_disable(helper->bufev_in,  EV_READ | EV_WRITE);
+    bufferevent_disable(helper->bufev_in,  EV_WRITE);
     bufferevent_free(helper->bufev_in);
   }
 
   if (helper->bufev_out) {
-    bufferevent_disable(helper->bufev_out,  EV_READ | EV_WRITE);
+    bufferevent_disable(helper->bufev_out,  EV_READ);
     bufferevent_free(helper->bufev_out);
   }
 
   if (helper->bufev_err) {
-    bufferevent_disable(helper->bufev_err,  EV_READ | EV_WRITE);
+    bufferevent_disable(helper->bufev_err,  EV_READ);
     bufferevent_free(helper->bufev_err);
   }
 
@@ -99,6 +98,10 @@ static int helper_stop(Helper *helper)
   close(helper->stderr);
 
   free(helper);
+
+  if (!sl->exiting)
+    helpers_refill_pool(sl);
+
   return 0;
 }
 
@@ -123,12 +126,19 @@ static void helper_parse_authentication(Helper *hl, Client *cl, int argc,
   if (!strcmp(argv[0], "none") && argc == 1) {
     cl->method = AUTH_METHOD_NONE;
   } else if (!strcmp(argv[0], "username") && argc == 3) {
+    int ret;
 
-    if (urldecode(argv[1], cl->auth.username.uname, 255) < 0)
+    ret = urldecode(argv[1], strlen(argv[1]), cl->auth.username.uname, 255);
+    if (ret < 0)
       return ;
 
-    if (urldecode(argv[2], cl->auth.username.passwd, 255) < 0)
+    cl->auth.username.ulen = ret;
+
+    ret = urldecode(argv[2], strlen(argv[2]), cl->auth.username.passwd, 255);
+    if (ret < 0)
       return ;
+
+    cl->auth.username.plen = ret;
 
     cl->method = AUTH_METHOD_USERNAME;
   }
@@ -201,13 +211,13 @@ static void on_helper_read_ok(Helper *hl, Client *cl, char *buffer)
     prcl_err(cl, "helper[%d] did not send a valid next-hop, "
 	     "and no default route set with --next-hop, dropping client",
 	     hl->pid);
-    client_drop(cl);
+    client_disconnect(cl);
     return ;
   }
   if (cl->method == AUTH_METHOD_INVALID) {
     prcl_err(cl, "helper[%d] did no provide a valid authentication method",
 	     hl->pid);
-    client_drop(cl);
+    client_disconnect(cl);
     return ;
   }
 
@@ -248,6 +258,8 @@ static void on_helper_read_stdout(struct bufferevent *bev, void *ctx)
     }
 
     *endofline = '\0';
+
+    pr_trace(sl, "helper[%d]: >> %s", helper->pid, buffer);
 
     client = list_first_entry(&helper->clients, Client, next_auth);
     list_del_init(&client->next_auth);
@@ -522,19 +534,6 @@ bool helper_available(SocksLink *sl)
   return !!sl->helpers_running;
 }
 
-int helper_stop_pid(SocksLink *sl, pid_t pid, bool dying)
-{
-  Helper *helper, *tmp;
-
-  list_for_each_entry_safe(helper, tmp, &sl->helpers, next, Helper) {
-    if (helper->pid == pid) {
-      helper->dying = dying;
-      return helper_stop(helper);
-    }
-  }
-  return -1;
-}
-
 static Helper *helper_round_robin(SocksLink *sl)
 {
   Helper *helper;
@@ -578,11 +577,15 @@ int helper_call(Client *client)
 
     bufferevent_write(bev, "username ", 9);
 
-    bytes = urlencode(client->auth.username.uname, buf, sizeof (buf));
+    bytes = urlencode(client->auth.username.uname, client->auth.username.ulen,
+		      buf, sizeof (buf));
+
     bufferevent_write(bev, buf, bytes);
     bufferevent_write(bev, " ", 1);
 
-    bytes = urlencode(client->auth.username.passwd, buf, sizeof (buf));
+    bytes = urlencode(client->auth.username.passwd, client->auth.username.plen,
+		      buf, sizeof (buf));
+
     bufferevent_write(bev, buf, bytes);
   }
   bufferevent_write(bev, "\n", 1);

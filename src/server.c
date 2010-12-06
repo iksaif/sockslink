@@ -55,7 +55,8 @@ static void on_server_auth_username(struct bufferevent *bev, void *ctx)
   prcl_trace(cl, "username authentication result: %#x %#x", ver, result);
 
   if (ver != 0x01 || result != 0x00) {
-    client_drop(cl);
+    client_auth_username_fail(cl);
+    client_disconnect(cl);
     return ;
   }
 
@@ -71,8 +72,8 @@ static void server_auth_username(Client *cl)
 {
   struct bufferevent *bev = cl->server.bufev;
   uint8_t ver = 0x01;
-  uint8_t ulen = strlen(cl->auth.username.uname);
-  uint8_t plen = strlen(cl->auth.username.passwd);
+  uint8_t ulen = cl->auth.username.ulen;
+  uint8_t plen = cl->auth.username.plen;
 
   prcl_trace(cl, "sending username authentication data");
 
@@ -171,13 +172,13 @@ static void on_server_connect(struct bufferevent *bev, void *ctx)
 static void on_server_read_stream(struct bufferevent *bev, void *ctx)
 {
   Client *cl = ctx;
-  char buf[SOCKS_STREAM_BUFSIZ];
   size_t bytes = EVBUFFER_LENGTH(EVBUFFER_INPUT(bev));
+  char *buffer = EVBUFFER_DATA(EVBUFFER_INPUT(bev));
 
   prcl_trace(cl, "received %d bytes from server", bytes);
 
-  bytes = bufferevent_read(bev, buf, sizeof (buf));
-  bufferevent_write(cl->client.bufev, buf, bytes);
+  bufferevent_write(cl->client.bufev, buffer, bytes);
+  evbuffer_drain(EVBUFFER_INPUT(bev), bytes);
 }
 
 void server_start_stream(Client *cl)

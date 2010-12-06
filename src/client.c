@@ -19,13 +19,14 @@ static void on_client_event(struct bufferevent *bev, short why, void *ctx)
     /* Client disconnected, remove the read event and the
      * free the client structure. */
     pr_debug(sl, "client disconnected");
+    client_drop(cl);
   } else if (why & EVBUFFER_TIMEOUT) {
     pr_debug(sl, "client timeout");
+    client_disconnect(cl);
   } else if (cl->client.fd != -1) {
     pr_debug(sl, "client socket error, disconnecting");
+    client_drop(cl);
   }
-
-  client_drop(cl);
 }
 
 static void on_client_write(struct bufferevent *bev, void *ctx)
@@ -60,9 +61,10 @@ static void client_connect_server(Client *cl)
   if (!sl->helpers_max) {
     server_connect(cl, &sl->nexthop_addr, sl->nexthop_addrlen);
   } else {
-    if (helper_call(cl))
+    if (helper_call(cl)) {
       /* No helper available, drop client (he may try to reconnect later) */
-      client_drop(cl);
+      client_disconnect(cl);
+    }
   }
 }
 
@@ -118,11 +120,11 @@ static void on_client_read_auth_username(struct bufferevent *bev, void *ctx)
   if (bytes < 2 + ulen + 1 + plen)
     return ;
 
+  cl->auth.username.ulen = ulen;
+  cl->auth.username.plen = plen;
+
   memcpy(cl->auth.username.uname, buffer + 2, ulen);
   memcpy(cl->auth.username.passwd, buffer + 2 + ulen + 1, plen);
-
-  prcl_trace(cl, "user: %s, passwd: %s", cl->auth.username.uname,
-	     cl->auth.username.passwd);
 
   evbuffer_drain(EVBUFFER_INPUT(bev), 2 + ulen + 1 + plen);
 
@@ -132,13 +134,13 @@ static void on_client_read_auth_username(struct bufferevent *bev, void *ctx)
 static void on_client_read_stream(struct bufferevent *bev, void *ctx)
 {
   Client *cl = ctx;
-  char buf[SOCKS_STREAM_BUFSIZ];
   size_t bytes = EVBUFFER_LENGTH(EVBUFFER_INPUT(bev));
+  char *buffer = EVBUFFER_DATA(EVBUFFER_INPUT(bev));
 
   prcl_trace(cl, "received %d bytes from client", bytes);
 
-  bytes = bufferevent_read(bev, buf, sizeof (buf));
-  bufferevent_write(cl->server.bufev, buf, bytes);
+  bufferevent_write(cl->server.bufev, buffer, bytes);
+  evbuffer_drain(EVBUFFER_INPUT(bev), bytes);
 }
 
 static void on_client_read_init(struct bufferevent *bev, void *ctx)
@@ -190,9 +192,7 @@ static void on_client_read_init(struct bufferevent *bev, void *ctx)
 
   cl->method = method;
 
-  if (method == AUTH_METHOD_INVALID)
-    client_disconnect(cl);
-  else if (method == AUTH_METHOD_NONE)
+  if (method == AUTH_METHOD_NONE)
     client_connect_server(cl);
   else if (method == AUTH_METHOD_USERNAME) {
     bufferevent_setcb(cl->client.bufev, on_client_read_auth_username,
@@ -204,11 +204,16 @@ static void on_client_read_init(struct bufferevent *bev, void *ctx)
   }
 
   bufferevent_write(cl->client.bufev, (uint8_t []){SOCKS5_VER, method}, 2);
+
+  if (method == AUTH_METHOD_INVALID)
+    client_disconnect(cl);
 }
 
 void client_start_stream(Client *cl)
 {
   struct bufferevent *bev = cl->client.bufev;
+
+  cl->authenticated = true;
 
   bufferevent_disable(bev, EV_READ | EV_WRITE);
   bufferevent_settimeout(bev, SOCKS_IO_TIMEOUT, SOCKS_IO_TIMEOUT);
@@ -268,10 +273,18 @@ void client_disconnect(Client *cl)
 
   prcl_trace(cl, "disconnecting client");
 
+  /* first, try to send bytes, then disconnect */
   if (bytes)
     cl->close = true;
-  else
-    client_drop(cl);
+  else {
+    if (!cl->authenticated && cl->method == AUTH_METHOD_USERNAME) {
+      /* tsocks <= 1.8 will freeze if the socket is disconnected before
+       * authentication results */
+      client_auth_username_fail(cl);
+      cl->close = true;
+    } else
+      client_drop(cl);
+  }
 }
 
 /* Disconnect and remove the client *NOW* */
@@ -280,7 +293,7 @@ void client_drop(Client *cl)
   if (!cl)
     return ;
 
-  prcl_trace(cl, "dropping client");
+  prcl_trace(cl, "dropping client #%d", cl->client.fd);
 
   if (cl->client.bufev) {
     bufferevent_disable(cl->client.bufev,  EV_READ | EV_WRITE);

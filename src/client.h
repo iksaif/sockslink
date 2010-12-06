@@ -21,11 +21,14 @@ struct client {
   bool close;
   struct list_head next_auth;
   struct list_head next;
+  bool authenticated;
   uint8_t method;
   union {
     struct {
-      char uname[256];
-      char passwd[256];
+      uint8_t ulen;
+      uint8_t uname[256];
+      uint8_t plen;
+      uint8_t passwd[256];
     } username;
   } auth;
 };

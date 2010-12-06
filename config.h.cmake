@@ -16,7 +16,7 @@
 /*
  * Stream buffer size
  */
-#define SOCKS_STREAM_BUFSIZ	(1024 * 4)
+#define SOCKS_STREAM_BUFSIZ	(1024 * 64 * 2)
 
 /*
  * Timeout before re-trying to launch helper

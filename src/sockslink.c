@@ -40,16 +40,15 @@ static void sig_sigaction(int sig, siginfo_t *infos, void *ctx)
   case SIGCHLD:
     {
       int status;
+      Helper *helper, *tmp;
 
       if (infos->si_pid != waitpid(infos->si_pid, &status, WNOHANG))
 	break ;
 
       list_for_each_entry(sl, &servers, next, SocksLink) {
-	if (sl->exiting)
-	  continue ;
-
-	helper_stop_pid(sl, infos->si_pid, true);
-	helpers_refill_pool(sl);
+	list_for_each_entry_safe(helper, tmp, &sl->helpers, next, Helper)
+	  if (helper->pid == infos->si_pid)
+	    helper->dying = true;
       }
     }
     break ;
@@ -159,7 +158,7 @@ static void on_accept(int afd, short ev, void *arg)
     return ;
   }
 
-  prcl_debug(client, "client connected");
+  prcl_debug(client, "client connected #%d", client->client.fd);
 }
 
 int sockslink_start(SocksLink *sl)
@@ -327,7 +326,7 @@ int sockslink_stop(SocksLink *sl)
   pr_infos(sl, "stopping sockslink");
 
   list_for_each_entry_safe(client, ctmp, &sl->clients, next, Client)
-    client_drop(client);
+    client_disconnect(client);
 
   for (int i = 0; i < SOCKSLINK_LISTEN_FD_MAX; ++i) {
     if (sl->fd[i] == -1)

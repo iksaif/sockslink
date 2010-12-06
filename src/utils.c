@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <ctype.h>
+#include <errno.h>
 
 #include "config.h"
 #include "utils.h"
@@ -128,17 +130,61 @@ char *strnchr(const char *s, size_t count, int c)
   return NULL;
 }
 
-/* FIXME */
-int urldecode(const char *src, char *dst, size_t len)
+static uint8_t htoc(uint8_t c)
 {
-  memcpy(dst, src, strlen(src));
-  return strlen(src);
+  if (isdigit(c))
+    return c - '0';
+  if (c >= 'a' && c <= 'f')
+    return c - 'a';
+  if (c >= 'A' && c <= 'F')
+    return c - 'A';
+  return -1;
 }
 
-/* FIXME , ENOSPC */
-int urlencode(const char *src, char *dst, size_t len)
+int urldecode(const char *src, size_t srclen, char *dst, size_t dstlen)
 {
-  memcpy(dst, src, strlen(src));
-  return strlen(src);
+  size_t bytes = 0;
+
+  while (srclen > 0 && dstlen > 0) {
+    if (*src == '%') {
+      if (srclen < 3)
+	break;
+      *dst++ = (htoc(*(src + 1)) << 4) | htoc(*(src + 2));
+      src += 3, dstlen++, srclen -= 3, bytes++;
+    } else {
+      *dst++ = *src++, dstlen--, srclen--, bytes++;
+    }
+  }
+  if (srclen)
+    return -ENOSPC;
+  return bytes;
 }
 
+static uint8_t ctoh(uint8_t c)
+{
+  if (c < 10)
+    return '0' + c;
+  else
+    return 'a' + c - 10;
+}
+
+int urlencode(const char *src, size_t srclen, char *dst, size_t dstlen)
+{
+  size_t bytes = 0;
+
+  while (srclen > 0 && dstlen > 0) {
+    if (isalnum(*src)) {
+      *dst++ = *src++, bytes++, srclen--, dstlen--;
+    } else {
+      if (dstlen < 3)
+	break ;
+      *dst++ = '%';
+      *dst++ = ctoh(((*src >> 4) & 0xF));
+      *dst++ = ctoh(((*src)      & 0xF));
+      src++, bytes += 3, srclen--, dstlen -= 3;
+    }
+  }
+  if (srclen)
+    return -ENOSPC;
+  return bytes;
+}
