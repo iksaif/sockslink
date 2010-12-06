@@ -10,6 +10,7 @@ set(sockslink_SRCS
   sockslink.c
   client.c
   server.c
+  helper.c
   log.c
   utils.c
   daemonize.c

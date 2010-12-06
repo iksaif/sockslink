@@ -11,6 +11,10 @@ int sock_set_reuseaddr(int s, int on);
 
 size_t strlcpy(char *dst, const char *src, size_t size);
 size_t strlcat(char *dst, const char *src, size_t size);
+char *strnchr(const char *s, size_t count, int c);
+
+int urldecode(const char *src, char *dst, size_t len);
+int urlencode(const char *src, char *dst, size_t len);
 
 #ifdef HAVE_IPV6
 # define ADDR_NTOP_BUFSIZ INET6_ADDRSTRLEN

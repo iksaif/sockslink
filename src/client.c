@@ -5,6 +5,7 @@
 #include "sockslink.h"
 #include "client.h"
 #include "server.h"
+#include "helper.h"
 #include "list.h"
 #include "log.h"
 #include "config.h"
@@ -56,10 +57,12 @@ static void client_connect_server(Client *cl)
 		    on_client_write, on_client_event, cl);
   bufferevent_setwatermark(cl->client.bufev, EV_READ, 0, 1);
 
-  if (!sl->helper.cmd) {
+  if (!sl->helpers_max) {
     server_connect(cl, &sl->nexthop_addr, sl->nexthop_addrlen);
   } else {
-    /* FIXME ask helper: timeout, helper died, ...*/
+    if (helper_call(cl))
+      /* No helper available, drop client (he may try to reconnect later) */
+      client_drop(cl);
   }
 }
 
@@ -69,6 +72,13 @@ static void client_invalid_version(Client *cl)
 
   bufferevent_write(cl->client.bufev, message, sizeof (message));
   client_disconnect(cl);
+}
+
+void client_auth_username_fail(Client *cl)
+{
+  static const uint8_t message[] = {0x01, 0xFF};
+
+  bufferevent_write(cl->client.bufev, message, sizeof (message));
 }
 
 void client_auth_username_successful(Client *cl)
@@ -229,6 +239,8 @@ Client *client_new(SocksLink *sl, int fd, struct sockaddr_storage *addr,
     return NULL;
   }
 
+  bufferevent_base_set(sl->base, bev);
+
   cl->parent = sl;
   cl->client.bufev = bev;
   cl->client.fd = fd;
@@ -238,7 +250,6 @@ Client *client_new(SocksLink *sl, int fd, struct sockaddr_storage *addr,
 
   list_add(&cl->next, &sl->clients);
 
-  bufferevent_base_set(sl->base, bev);
   if (sl->pipe) {
     client_connect_server(cl);
   } else {
@@ -255,6 +266,8 @@ void client_disconnect(Client *cl)
 {
   size_t bytes = EVBUFFER_LENGTH(EVBUFFER_OUTPUT(cl->client.bufev));
 
+  prcl_trace(cl, "disconnecting client");
+
   if (bytes)
     cl->close = true;
   else
@@ -266,6 +279,8 @@ void client_drop(Client *cl)
 {
   if (!cl)
     return ;
+
+  prcl_trace(cl, "dropping client");
 
   if (cl->client.bufev) {
     bufferevent_disable(cl->client.bufev,  EV_READ | EV_WRITE);

@@ -10,6 +10,7 @@ int daemonize(void)
 {
   pid_t pid, sid;
   int ret;
+  int fd;
 
   pid = fork();
   if (pid < 0)
@@ -27,9 +28,14 @@ int daemonize(void)
   if ((ret = chdir("/")) < 0)
     return ret;
 
-  close(STDIN_FILENO);
-  close(STDOUT_FILENO);
-  close(STDERR_FILENO);
+  if ((fd = open("/dev/null", O_RDWR)) == -1)
+    return fd;
+
+  dup2(fd, STDIN_FILENO);
+  dup2(fd, STDOUT_FILENO);
+  dup2(fd, STDERR_FILENO);
+
+  close(fd);
   return 0;
 }
 

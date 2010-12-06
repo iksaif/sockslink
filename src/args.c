@@ -1,3 +1,5 @@
+#include <sys/stat.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -36,6 +38,7 @@ static void usage(void)
 	  "                            between address and port (example: '::1 1081' or \n"
 	  "                            '192.168.0.1 1081')\n"
 	  "  -H, --helper=<helper>     path to authentication and routing helper\n"
+	  "  -j, --helper-max=<num>    number of helper instances sockslink should start (default is 1)\n"
 	  "  -m, --method=<method>     enable this method, arguments order defines method priority,\n"
 	  "                            \"none\" and \"username\" methods are available\n"
 	  "\n"
@@ -52,11 +55,31 @@ static void usage(void)
 
 static int parse_helper(SocksLink *sl, const char *optarg)
 {
-  if (sl->helper.cmd) {
-    fprintf(stderr,  "error: helper already set");
+  struct stat st;
+
+  if (sl->helper_command) {
+    fprintf(stderr, "error: helper already set\n");
     return -1;
   }
-  sl->helper.cmd = optarg;
+  if (stat(optarg, &st)) {
+    fprintf(stderr, "error: can't get helper's informations: %s\n", strerror(errno));
+    return -1;
+  }
+  sl->helper_command = optarg;
+  return 0;
+}
+
+static int parse_helpers_max(SocksLink *sl, const char *optarg)
+{
+  if (sl->helpers_max) {
+    fprintf(stderr, "error: helper num already set\n");
+    return -1;
+  }
+  sl->helpers_max = strtol(optarg, NULL, 0);
+  if (sl->helpers_max < 1) {
+    fprintf(stderr, "error: invalid helper num '%d'\n", sl->helpers_max);
+    return -1;
+  }
   return 0;
 }
 
@@ -64,7 +87,7 @@ static int parse_helper(SocksLink *sl, const char *optarg)
 static int parse_interface(SocksLink *sl, const char *optarg)
 {
   if (sl->iface) {
-    fprintf(stderr,  "error: listenning interface already set");
+    fprintf(stderr,  "error: listenning interface already set\n");
     return -1;
   }
   sl->iface = optarg;
@@ -191,6 +214,7 @@ int parse_args(int argc, char *argv[], SocksLink * sl)
       {"port",          required_argument, 0, 'p'},
       {"pipe",          no_argument, 0, 'P'},
       {"helper",        required_argument, 0, 'H'},
+      {"helper-max",    required_argument, 0, 'j'},
       {"method",        required_argument, 0, 'm'},
       {"next-hop",      required_argument, 0, 'n'},
       {"help",          no_argument,       0, 'h'},
@@ -202,7 +226,7 @@ int parse_args(int argc, char *argv[], SocksLink * sl)
     int option_index = 0;
     char c;
 
-    c = getopt_long(argc, argv, "Dvqu:g:i:l:p:H:Pm:n:b:hV",
+    c = getopt_long(argc, argv, "Dvqu:g:i:l:p:H:j:Pm:n:b:hV",
 		    long_options, &option_index);
 
     if (c == -1)
@@ -262,6 +286,11 @@ int parse_args(int argc, char *argv[], SocksLink * sl)
 	goto error;
       break;
 
+    case 'j':
+      if (parse_helpers_max(sl, optarg))
+	goto error;
+      break;
+
     case 'm':
       if (parse_method(sl, optarg))
 	goto error;
@@ -295,7 +324,7 @@ int parse_args(int argc, char *argv[], SocksLink * sl)
     }
   }
 
-  if (sl->pipe && sl->helper.cmd) {
+  if (sl->pipe && sl->helper_command) {
     pr_err(sl, "You can't use --pipe with --helper");
     return -1;
   }
@@ -307,6 +336,11 @@ int parse_args(int argc, char *argv[], SocksLink * sl)
 
   if (sl->pipe && !sl->nexthop_addrlen) {
     pr_err(sl, "You can't use --pipe without --next-hop");
+    return -1;
+  }
+
+  if (!sl->helper_command && !sl->nexthop_addrlen) {
+    pr_err(sl, "You must specify --helper-command or --next-hop");
     return -1;
   }
 
@@ -327,9 +361,12 @@ int parse_args(int argc, char *argv[], SocksLink * sl)
 
   if (sl->methods[0] == AUTH_METHOD_INVALID) {
     sl->methods[0] = AUTH_METHOD_NONE;
-    if (sl->helper.cmd)
+    if (sl->helper_command)
       sl->methods[1] = AUTH_METHOD_USERNAME;
   }
+
+  if (sl->helper_command && !sl->helpers_max)
+    sl->helpers_max = 1;
 
   return 0;
  error:

@@ -38,5 +38,6 @@ void client_disconnect(Client *cl);
 void client_drop(Client *cl);
 void client_start_stream(Client *cl);
 void client_auth_username_successful(Client *cl);
+void client_auth_username_fail(Client *cl);
 
 #endif /* !CLIENT_H */

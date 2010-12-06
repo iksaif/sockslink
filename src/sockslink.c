@@ -27,33 +27,34 @@ static LIST_HEAD(servers);
 
 static void sig_sigaction(int sig, siginfo_t *infos, void *ctx)
 {
-  SocksLink *sl;
+  SocksLink *sl = NULL;
 
   switch (sig) {
   case SIGINT:
     list_for_each_entry(sl, &servers, next, SocksLink) {
       if (sl->base)
 	event_base_loopbreak(sl->base);
+      sl->exiting = true;
     }
-    break;
+    break ;
   case SIGCHLD:
     {
       int status;
 
       if (infos->si_pid != waitpid(infos->si_pid, &status, WNOHANG))
-	break;
+	break ;
 
-      list_for_each_entry(sl, &servers, next, SocksLink)
-	if (sl->helper.pid == infos->si_pid) {
-	  sl->helper.died++;
-	  gettimeofday(&sl->helper.tod, NULL);
-	  helper_stop(&sl->helper);
-	  break ;
-	}
+      list_for_each_entry(sl, &servers, next, SocksLink) {
+	if (sl->exiting)
+	  continue ;
+
+	helper_stop_pid(sl, infos->si_pid, true);
+	helpers_refill_pool(sl);
+      }
     }
-    break;
+    break ;
   default: /* Ignore */
-    break;
+    break ;
   }
 }
 
@@ -103,8 +104,7 @@ int sockslink_init(SocksLink *sl)
 
   INIT_LIST_HEAD(&sl->clients);
   INIT_LIST_HEAD(&sl->next);
-
-  //helper_init(&sl->helper);
+  INIT_LIST_HEAD(&sl->helpers);
 
   sl->base = event_base_new();
   if (!sl->base) {
@@ -159,7 +159,6 @@ static void on_accept(int afd, short ev, void *arg)
     return ;
   }
 
-  /* FIXME */
   prcl_debug(client, "client connected");
 }
 
@@ -315,13 +314,14 @@ int sockslink_start(SocksLink *sl)
     event_add(&sl->ev_accept[i], NULL);
   }
 
+  helpers_start_pool(sl);
+
   return 0;
 }
 
 int sockslink_stop(SocksLink *sl)
 {
   int ret = 0;
-
   Client *client, *ctmp;
 
   pr_infos(sl, "stopping sockslink");
@@ -337,8 +337,7 @@ int sockslink_stop(SocksLink *sl)
     sl->fd[i] = -1;
   }
 
-  helper_stop(&sl->helper);
-  helper_clear(&sl->helper);
+  helpers_stop_pool(sl);
   return ret;
 }
 

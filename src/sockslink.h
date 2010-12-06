@@ -26,12 +26,17 @@ struct sockslink;
 
 struct helper {
   struct sockslink *parent;
-  int pid;
-  int fd;
-  int died;
-  struct timeval tod;
-  const char *cmd;
-  struct bufferevent *bufev;
+  struct list_head clients;
+  pid_t pid;
+  bool running; /* helper is up and running */
+  bool dying;   /* helper is dying */
+  int stdin;
+  int stdout;
+  int stderr;
+  struct bufferevent *bufev_in;
+  struct bufferevent *bufev_out;
+  struct bufferevent *bufev_err;
+  struct list_head next;
 };
 
 typedef struct helper Helper;
@@ -39,25 +44,42 @@ typedef struct helper Helper;
 #define SOCKSLINK_LISTEN_FD_MAX		256
 
 struct sockslink {
-  struct event_base *base;
-  struct list_head clients;
-  struct list_head addrs;
-  struct helper helper;
+  /* Config */
   int verbose;
   bool pipe;
   bool fg;
   bool syslog;
-  uint8_t methods[2];
-  int fd[SOCKSLINK_LISTEN_FD_MAX];
-  struct event ev_accept[SOCKSLINK_LISTEN_FD_MAX];
-  const char *addresses[SOCKSLINK_LISTEN_FD_MAX];
-  const char *iface;
-  const char *port;
   const char *username;
   const char *groupname;
+  bool exiting;
+
+  /* Network config */
+  const char *iface;
+  const char *port;
+  const char *addresses[SOCKSLINK_LISTEN_FD_MAX];
   struct sockaddr_storage nexthop_addr;
   socklen_t nexthop_addrlen;
   const char *nexthop_port;
+
+  /* Auth config */
+  uint8_t methods[2];
+
+  /* network and libevent */
+  struct event_base *base;
+  int fd[SOCKSLINK_LISTEN_FD_MAX];
+  struct event ev_accept[SOCKSLINK_LISTEN_FD_MAX];
+
+  /* Clients */
+  struct list_head clients;
+
+  /* Helpers */
+  const char *helper_command;
+  int helpers_max;
+  int helpers_running;
+  struct list_head helpers;
+  struct event helper_refill_event;
+
+  /* To chain SocksLinks */
   struct list_head next;
 };
 

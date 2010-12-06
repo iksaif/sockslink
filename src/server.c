@@ -128,6 +128,7 @@ static void server_negociate(Client *cl)
   prcl_debug(cl, "sending negociation request to remote server (method: %#x)",
 	     cl->method);
 
+  bufferevent_disable(bev, EV_READ | EV_WRITE);
   bufferevent_settimeout(bev, SOCKS5_AUTH_TIMEOUT, SOCKS5_AUTH_TIMEOUT);
   bufferevent_setcb(bev, on_server_negociate, on_server_write, on_server_event, cl);
   bufferevent_enable(bev, EV_READ | EV_WRITE);
@@ -237,9 +238,9 @@ void server_connect(Client *cl, const struct sockaddr_storage *addr,
   cl->server.fd = fd;
   cl->server.bufev = bev;
 
+  bufferevent_base_set(sl->base, bev);
   bufferevent_setcb(bev, NULL, on_server_connect, on_server_event, cl);
   bufferevent_settimeout(bev, 0, SOCKS5_AUTH_TIMEOUT);
-  bufferevent_base_set(sl->base, bev);
   bufferevent_enable(bev, EV_WRITE);
 
   return ;
