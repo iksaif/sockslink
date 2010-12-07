@@ -190,7 +190,8 @@ static void on_helper_read_ok(Helper *hl, Client *cl, char *buffer)
   if (sl->nexthop_addrlen) {
     memcpy(&nexthop_addr, &sl->nexthop_addr, sl->nexthop_addrlen);
     nexthop_addrlen = sl->nexthop_addrlen;
-  }
+  } else
+    nexthop_addrlen = 0;
 
   for (argc = 0; *buffer && argc < ARRAY_SIZE(argv); ++argc) {
     argv[argc] = buffer;
