@@ -433,6 +433,10 @@ int parse_args(int argc, char *argv[], SocksLink * sl)
   if (sl->helper_command && !sl->helpers_max)
     sl->helpers_max = 1;
 
+#if defined(DEBUG)
+  sl->cores = 1;
+#endif
+
   return 0;
  error:
   return -1;

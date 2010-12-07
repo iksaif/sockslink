@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <syslog.h>
+#include <string.h>
 
 #include "log.h"
 #include "utils.h"
@@ -22,11 +23,15 @@ static void pr_syslog(int level, const char *prefix, const char *fmt, va_list ap
   char buf[BUFSIZ];
   int facility = LOG_USER | level;
   int ret;
+  size_t bytes;
 
-  if (prefix)
+  if (prefix) {
     strlcpy(buf, prefix, sizeof (buf));
+    bytes = strlen(buf);
+  } else
+    bytes = 0;
 
-  ret = vsnprintf(buf, sizeof (buf), fmt, ap);
+  ret = vsnprintf(buf + bytes, sizeof (buf) - bytes, fmt, ap);
   if (ret < 0)
     return ;
 

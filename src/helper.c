@@ -60,7 +60,7 @@ static int helper_stop(Helper *helper)
   Client *client, *ctmp;
   SocksLink *sl = helper->parent;
 
-  pr_debug(sl, "helper[%d] stopping", helper->pid);
+  pr_infos(sl, "helper[%d] stopping", helper->pid);
 
   if (helper->running) {
     helper->running = false;
@@ -235,7 +235,7 @@ static void on_helper_read_err(Helper *hl, Client *cl, const char *error)
 {
   SocksLink *sl = cl->parent;
 
-  pr_debug(sl, "helper[%d]: authentication error: %s", hl->pid, error);
+  pr_warn(sl, "helper[%d]: authentication error: %s", hl->pid, error);
 
   if (cl->method == AUTH_METHOD_USERNAME)
     client_auth_username_fail(cl);
@@ -324,7 +324,7 @@ static void on_helper_write_stdin(struct bufferevent *bev, void *ctx)
     bufferevent_settimeout(bev, 0, 0);
     helper->running = true;
     helper->parent->helpers_running++;
-    pr_debug(sl, "helper[%d] started", helper->pid);
+    pr_infos(sl, "helper[%d] started", helper->pid);
   } else {
     pr_trace(sl, "helper[%d] finished to write data", helper->pid);
   }
@@ -338,11 +338,11 @@ static void on_helper_event(struct bufferevent *bev, short why, void *ctx)
 
   if (why & EVBUFFER_EOF) {
     /* Helper died... */
-    pr_debug(sl, "helper[%d] died", helper->pid);
+    pr_infos(sl, "helper[%d] died", helper->pid);
   } else if (why & EVBUFFER_TIMEOUT) {
-    pr_debug(sl, "helper[%d] authentication timeout", helper->pid);
+    pr_infos(sl, "helper[%d] authentication timeout", helper->pid);
   } else {
-    pr_debug(sl, "helper[%d] unknown error", helper->pid);
+    pr_infos(sl, "helper[%d] unknown error", helper->pid);
   }
   helper_stop(helper);
 }
@@ -504,7 +504,7 @@ static void on_helpers_refill(int fd, short event, void *ctx)
 
 void helpers_start_pool(SocksLink *sl)
 {
-  pr_debug(sl, "starting %d helpers", sl->helpers_max);
+  pr_infos(sl, "starting %d helpers", sl->helpers_max);
 
   for (int i = sl->helpers_running; i < sl->helpers_max; ++i)
     helper_start(sl);

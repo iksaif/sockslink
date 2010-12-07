@@ -137,7 +137,7 @@ void sockslink_clear(SocksLink *sl)
   for (int i = 0; i < ARRAY_SIZE(sl->addresses); ++i)
     free((char *)sl->addresses[i]);
 
-  pr_debug(NULL, "clearing sockslink");
+  pr_debug(sl, "clearing sockslink");
   event_base_free(sl->base);
   list_del_init(&sl->next);
 }
@@ -168,7 +168,7 @@ static void on_accept(int afd, short ev, void *arg)
     return ;
   }
 
-  prcl_debug(client, "client connected #%d", client->client.fd);
+  prcl_infos(client, "client connected #%d", client->client.fd);
 }
 
 int sockslink_start(SocksLink *sl)
