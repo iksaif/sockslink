@@ -53,6 +53,7 @@ struct sockslink {
   const char *groupname;
   bool exiting;
   bool cores;
+  const char *conf;
 
   /* Network config */
   const char *iface;

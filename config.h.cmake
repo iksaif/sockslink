@@ -32,3 +32,8 @@
  * Maximum auth time for an helper
  */
 #define HELPER_AUTH_TIMEOUT	10
+
+/*
+ * Path of default config file
+ */
+#define SOCKSLINK_CONF_FILE	"/etc/socks/sockslinkd.conf"

@@ -127,6 +127,16 @@ error:
 
 void sockslink_clear(SocksLink *sl)
 {
+  free((char *)sl->username);
+  free((char *)sl->groupname);
+  free((char *)sl->conf);
+  free((char *)sl->iface);
+  free((char *)sl->port);
+  free((char *)sl->helper_command);
+
+  for (int i = 0; i < ARRAY_SIZE(sl->addresses); ++i)
+    free((char *)sl->addresses[i]);
+
   pr_debug(NULL, "clearing sockslink");
   event_base_free(sl->base);
   list_del_init(&sl->next);
