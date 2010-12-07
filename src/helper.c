@@ -47,7 +47,7 @@ static int helper_kill(Helper *helper)
   if (ret == -1 && errno == ESRCH)
     return 0;
 
-  pid = waitpid(helper->pid, &status, WNOHANG);
+  pid = waitpid(helper->pid, &status, 0);
 
   if (pid == helper->pid)
     return 0;
@@ -114,7 +114,7 @@ static int helper_stop(Helper *helper)
  * - if next-hop is 'default' use default route
  *
  * stdin> source-ip method [username [password]]
- * stdout< OK next-hop method [username [password]]
+ * stdout< OK (next-hop|!) method [username [password]]
  * stdout< ERR [error]
  */
 
@@ -125,47 +125,53 @@ static void helper_parse_authentication(Helper *hl, Client *cl, int argc,
 
   if (!strcmp(argv[0], "none") && argc == 1) {
     cl->method = AUTH_METHOD_NONE;
-  } else if (!strcmp(argv[0], "username") && argc == 3) {
+  } else if (!strcmp(argv[0], "username") && argc >= 1) {
     int ret;
+
+    if (argc < 2) /* username is optional */
+      goto exit;
 
     ret = urldecode(argv[1], strlen(argv[1]), cl->auth.username.uname, 255);
     if (ret < 0)
-      return ;
+      goto error;
 
     cl->auth.username.ulen = ret;
 
+    if (argc < 3) /* password is optional */
+      goto exit;
+
     ret = urldecode(argv[2], strlen(argv[2]), cl->auth.username.passwd, 255);
     if (ret < 0)
-      return ;
+      goto exit;
 
     cl->auth.username.plen = ret;
 
+  exit:
     cl->method = AUTH_METHOD_USERNAME;
+    return ;
+  error:
+    cl->method = AUTH_METHOD_INVALID;
+    return ;
   }
 }
 
-static int helper_parse_nexthop(Helper *hl, Client *cl, const char *address,
-				const char *service,
+static int helper_parse_nexthop(Helper *hl, Client *cl, const char *nexthop,
 				struct sockaddr_storage *nexthop_addr,
 				socklen_t *nexthop_addrlen)
 {
-  struct addrinfo hints;
-  struct addrinfo *result;
   int ret;
 
-  memset(&hints, 0, sizeof (hints));
-  ret = getaddrinfo(address, service, &hints, &result);
+  if (!strcmp(nexthop, "!"))
+    return 0;
+
+  ret = parse_ip_port(nexthop, nexthop_addr, nexthop_addrlen);
 
   if (ret != 0) {
     prcl_err(cl, "helper[%d]: can't resolve address: getaddrinfo(%s): %s",
-	     address, gai_strerror(ret));
+	     hl->pid, nexthop, gai_strerror(ret));
     return -1;
   }
 
-  memcpy(nexthop_addr, result->ai_addr, result->ai_addrlen);
-  *nexthop_addrlen = result->ai_addrlen;
-
-  freeaddrinfo(result);
   return 0;
 }
 
@@ -184,7 +190,7 @@ static void on_helper_read_ok(Helper *hl, Client *cl, char *buffer)
     nexthop_addrlen = sl->nexthop_addrlen;
   }
 
-  for (argc = 0; argc < ARRAY_SIZE(argv); ++argc) {
+  for (argc = 0; *buffer && argc < ARRAY_SIZE(argv); ++argc) {
     argv[argc] = buffer;
 
     for (; *buffer && !isblank(*buffer); buffer++)
@@ -193,8 +199,8 @@ static void on_helper_read_ok(Helper *hl, Client *cl, char *buffer)
       *buffer = '\0';
   }
 
-  if (argc >= 3) {
-    ret = helper_parse_nexthop(hl, cl, argv[1], argv[2],
+  if (argc >= 2) {
+    ret = helper_parse_nexthop(hl, cl, argv[1],
 			       &nexthop_addr, &nexthop_addrlen);
     if (ret < 0) {
       nexthop_addrlen = 0;
@@ -202,15 +208,13 @@ static void on_helper_read_ok(Helper *hl, Client *cl, char *buffer)
     }
   }
 
-  if (argc >= 4) {
-    helper_parse_authentication(hl, cl, argc - 3, argv + 3);
+  if (argc >= 3) {
+    helper_parse_authentication(hl, cl, argc - 2, argv + 2);
   }
 
  connect:
   if (!nexthop_addrlen) {
-    prcl_err(cl, "helper[%d] did not send a valid next-hop, "
-	     "and no default route set with --next-hop, dropping client",
-	     hl->pid);
+    prcl_err(cl, "helper[%d] did not send a valid next-hop", hl->pid);
     client_disconnect(cl);
     return ;
   }
@@ -259,14 +263,14 @@ static void on_helper_read_stdout(struct bufferevent *bev, void *ctx)
 
     *endofline = '\0';
 
-    pr_trace(sl, "helper[%d]: >> %s", helper->pid, buffer);
+    pr_trace(sl, "helper[%d]: >> [%s]", helper->pid, buffer);
 
     client = list_first_entry(&helper->clients, Client, next_auth);
     list_del_init(&client->next_auth);
 
-    if (strcmp(buffer, "OK"))
+    if (!strncmp(buffer, "OK", 2))
       on_helper_read_ok(helper, client, buffer);
-    else if (strcmp(buffer, "ERR"))
+    else if (!strncmp(buffer, "ERR", 3))
       on_helper_read_err(helper, client, buffer + 3);
     else
       pr_err(sl, "helper[%d] send an invalid answer (not starting "

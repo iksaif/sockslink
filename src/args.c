@@ -12,6 +12,7 @@
 #include "sockslink.h"
 #include "args.h"
 #include "log.h"
+#include "utils.h"
 
 static void version(void)
 {
@@ -145,58 +146,15 @@ static int parse_port(SocksLink *sl, const char *optarg)
 
 static int parse_nexthop(SocksLink *sl, const char *optarg)
 {
-  struct addrinfo hints;
-  struct addrinfo *result;
   int ret;
-  char *port = strrchr(optarg, ' ');
 
-  if (port)
-    *port++ = '\0';
-  else
-    port = "socks";
-
-  memset(&hints, 0, sizeof(struct addrinfo));
-  hints.ai_family = AF_UNSPEC;     /* Allow IPv4 or IPv6 */
-  hints.ai_flags = AI_PASSIVE;     /* For wildcard IP address */
-
-  ret = getaddrinfo(optarg, port, &hints, &result);
+  ret = parse_ip_port(optarg, &sl->nexthop_addr, &sl->nexthop_addrlen);
 
   if (ret != 0) {
     pr_err(sl, "getaddrinfo(%s): %s", optarg, gai_strerror(ret));
     return ret;
   }
 
-  memcpy(&sl->nexthop_addr, result->ai_addr, result->ai_addrlen);
-  sl->nexthop_addrlen = result->ai_addrlen;
-
-  switch (result->ai_family) {
-  case AF_INET:
-    {
-      char buf[INET_ADDRSTRLEN];
-      struct sockaddr_in *sin;
-
-      sin = ((struct sockaddr_in *)result->ai_addr);
-      inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof (buf));
-      pr_infos(sl, "default route: %s:%d", buf, ntohs(sin->sin_port));
-    }
-    break ;
-#ifdef HAVE_IPV6
-  case AF_INET6:
-    {
-      char buf[INET6_ADDRSTRLEN];
-      struct sockaddr_in6 *sin6;
-
-      sin6 = ((struct sockaddr_in6 *)result->ai_addr);
-      inet_ntop(result->ai_family, &sin6->sin6_addr, buf, sizeof (buf));
-      pr_infos(sl, "default route: [%s]:%d", buf, ntohs(sin6->sin6_port));
-    }
-    break ;
-#endif
-  default:
-    break ;
-  }
-
-  freeaddrinfo(result);
   return 0;
 }
 

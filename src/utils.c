@@ -1,10 +1,8 @@
 #include <arpa/inet.h>
-
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-
 #include <sys/fcntl.h>
-
+#include <netdb.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -188,3 +186,49 @@ int urlencode(const char *src, size_t srclen, char *dst, size_t dstlen)
     return -ENOSPC;
   return bytes;
 }
+
+int parse_ip_port(const char *str, struct sockaddr_storage *addr,
+		  socklen_t *addrlen)
+{
+  struct addrinfo hints;
+  struct addrinfo *result;
+  char *tmp = strdupa(str);
+  char *address = NULL;
+  char *service = NULL;
+  int ret;
+
+  memset(&hints, 0, sizeof (hints));
+  hints.ai_flags = AI_PASSIVE;     /* For wildcard IP address */
+
+  if (*tmp == '[') {
+    /* IPV6: [ipv6]:port */
+    address = tmp + 1;
+    service = strstr(tmp, "]:");
+    if (service) {
+      *service = '\0';
+      service += 2;
+    }
+    hints.ai_family = AF_INET6;
+  } else {
+    /* IPV5: ipv4:port */
+    address = tmp;
+    service = strchr(tmp, ':');
+    if (service) {
+      *service = '\0';
+      service += 1;
+    }
+    hints.ai_family = AF_INET;
+  }
+
+  ret = getaddrinfo(address, service, &hints, &result);
+
+  if (ret)
+    return ret;
+
+  memcpy(addr, result->ai_addr, result->ai_addrlen);
+  *addrlen = result->ai_addrlen;
+
+  freeaddrinfo(result);
+  return 0;
+}
+
