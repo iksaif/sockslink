@@ -70,8 +70,10 @@ static int helper_stop(Helper *helper)
   list_del_init(&helper->next);
 
   /* Drop clients waiting for auth on this helper */
-  list_for_each_entry_safe(client, ctmp, &helper->clients, next_auth, Client)
+  list_for_each_entry_safe(client, ctmp, &helper->clients, next_auth, Client) {
     client_disconnect(client);
+    list_del_init(&client->next_auth);
+  }
 
   if (!helper->dying && helper->pid > 0) {
     if (helper_kill(helper))
