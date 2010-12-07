@@ -25,7 +25,8 @@ int urlencode(const char *src, size_t srclen, char *dst, size_t dstlen);
 const char *addr_ntop(const struct sockaddr_storage *addr,
 		      char *dst, socklen_t size);
 
-int parse_ip_port(const char *address, struct sockaddr_storage *addr,
+int parse_ip_port(const char *address, const char *fallback_service,
+		  struct sockaddr_storage *addr,
 		  socklen_t *addrlen);
 
 #endif /* !UTILS_H */

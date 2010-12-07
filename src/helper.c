@@ -166,7 +166,7 @@ static int helper_parse_nexthop(Helper *hl, Client *cl, const char *nexthop,
   if (!strcmp(nexthop, "!"))
     return 0;
 
-  ret = parse_ip_port(nexthop, nexthop_addr, nexthop_addrlen);
+  ret = parse_ip_port(nexthop, "socks", nexthop_addr, nexthop_addrlen);
 
   if (ret != 0) {
     prcl_err(cl, "helper[%d]: can't resolve address: getaddrinfo(%s): %s",

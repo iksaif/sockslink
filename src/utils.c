@@ -187,7 +187,8 @@ int urlencode(const char *src, size_t srclen, char *dst, size_t dstlen)
   return bytes;
 }
 
-int parse_ip_port(const char *str, struct sockaddr_storage *addr,
+int parse_ip_port(const char *str, const char *fallback_service,
+		  struct sockaddr_storage *addr,
 		  socklen_t *addrlen)
 {
   struct addrinfo hints;
@@ -207,6 +208,8 @@ int parse_ip_port(const char *str, struct sockaddr_storage *addr,
     if (service) {
       *service = '\0';
       service += 2;
+    } else {
+      service = (char *)fallback_service;
     }
     hints.ai_family = AF_INET6;
   } else {
@@ -216,6 +219,8 @@ int parse_ip_port(const char *str, struct sockaddr_storage *addr,
     if (service) {
       *service = '\0';
       service += 1;
+    } else {
+      service = (char *)fallback_service;
     }
     hints.ai_family = AF_INET;
   }
@@ -231,4 +236,3 @@ int parse_ip_port(const char *str, struct sockaddr_storage *addr,
   freeaddrinfo(result);
   return 0;
 }
-

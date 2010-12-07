@@ -1,3 +1,5 @@
+#include <sys/time.h>
+#include <sys/resource.h>
 #include <sys/types.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -68,6 +70,37 @@ int drop_privileges(const char *username, const char *groupname)
   if (pw) {
     if (setuid(pw->pw_uid) == -1)
       return -1;
+  }
+  return 0;
+}
+
+int set_maxfds(int fds)
+{
+  struct rlimit rlim;
+
+  if (getrlimit(RLIMIT_NOFILE, &rlim) != 0) {
+    return -1;
+  }
+
+  if (fds) {
+    rlim.rlim_cur = fds;
+    rlim.rlim_max = fds;
+
+    if (setrlimit(RLIMIT_NOFILE, &rlim) != 0) {
+      return -1;
+    }
+  }
+
+  return rlim.rlim_cur;
+}
+
+int enable_cores(int cores)
+{
+  struct rlimit rlim;
+
+  if (cores && getrlimit(RLIMIT_CORE, &rlim) == 0) {
+    rlim.rlim_cur = rlim.rlim_max;
+    setrlimit(RLIMIT_CORE, &rlim);
   }
   return 0;
 }

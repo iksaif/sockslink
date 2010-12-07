@@ -168,6 +168,19 @@ int sockslink_start(SocksLink *sl)
 
   pr_debug(sl, "starting sockslink");
 
+  if (getuid() == 0) {
+    sl->fds_max = set_maxfds(sl->fds_max);
+
+    if (sl->fds_max < 0)
+      pr_err(sl, "error while getting/setting maximum number of open"
+	     "file descriptors: %s", strerror(errno));
+    else
+      pr_debug(sl, "can open up to %d fds", sl->fds_max);
+
+    if (sl->cores)
+      enable_cores(sl->cores);
+  }
+
   for (int i = 0; sl->addresses[i]; ++i) {
     struct addrinfo hints;
     struct addrinfo *result, *rp;

@@ -32,14 +32,16 @@ static void usage(void)
 #endif
 	  "  -l, --listen=<addr>       listen on this address  (default: 0.0.0.0 and ::)\n"
 	  "  -p, --port=<port>         TCP port (default: 1080)\n"
+	  "  -d, --max-fds=<num>       maximum number of file descriptor open\n"
+	  "                            = (clients * 2) + (helpers * 3) + 1\n"
 	  "\n"
 	  "  -P, --pipe                do nothing, just relay connections to next hop\n"
 	  "  -n, --next-hop=<next>     default route when not specified by helper\n"
-	  "                            to specify a non-standard port, use a space (' ')\n"
-	  "                            between address and port (example: '::1 1081' or \n"
-	  "                            '192.168.0.1 1081')\n"
+	  "                            to specify a non-standard port, use ':'\n"
+	  "                            between address and port (example: '[::1]:1081' or \n"
+	  "                            '192.168.0.1:1081')\n"
 	  "  -H, --helper=<helper>     path to authentication and routing helper\n"
-	  "  -j, --helper-max=<num>    number of helper instances sockslink should start (default is 1)\n"
+	  "  -j, --helpers-max=<num>   number of helper instances sockslink should start (default is 1)\n"
 	  "  -m, --method=<method>     enable this method, arguments order defines method priority,\n"
 	  "                            \"none\" and \"username\" methods are available\n"
 	  "\n"
@@ -63,7 +65,12 @@ static int parse_helper(SocksLink *sl, const char *optarg)
     return -1;
   }
   if (stat(optarg, &st)) {
-    fprintf(stderr, "error: can't get helper's informations: %s\n", strerror(errno));
+    fprintf(stderr, "error: can't get helper's informations: %s\n",
+	    strerror(errno));
+    return -1;
+  }
+  if (!S_ISREG(st.st_mode)) {
+    fprintf(stderr, "error: helper is not a regular file");
     return -1;
   }
   sl->helper_command = optarg;
@@ -78,7 +85,23 @@ static int parse_helpers_max(SocksLink *sl, const char *optarg)
   }
   sl->helpers_max = strtol(optarg, NULL, 0);
   if (sl->helpers_max < 1) {
-    fprintf(stderr, "error: invalid helper num '%d'\n", sl->helpers_max);
+    fprintf(stderr, "error: invalid argument for --helpers-max: '%s'\n",
+	    optarg);
+    return -1;
+  }
+  return 0;
+}
+
+static int parse_fd_max(SocksLink *sl, const char *optarg)
+{
+  if (sl->fds_max) {
+    fprintf(stderr, "error: maximum number of fd already set\n");
+    return -1;
+  }
+  sl->fds_max = strtol(optarg, NULL, 0);
+  if (sl->fds_max < 1) {
+    fprintf(stderr, "error: invalid argument for --max-fds '%s'\n",
+	    optarg);
     return -1;
   }
   return 0;
@@ -148,7 +171,7 @@ static int parse_nexthop(SocksLink *sl, const char *optarg)
 {
   int ret;
 
-  ret = parse_ip_port(optarg, &sl->nexthop_addr, &sl->nexthop_addrlen);
+  ret = parse_ip_port(optarg, "socks", &sl->nexthop_addr, &sl->nexthop_addrlen);
 
   if (ret != 0) {
     pr_err(sl, "getaddrinfo(%s): %s", optarg, gai_strerror(ret));
@@ -170,9 +193,10 @@ int parse_args(int argc, char *argv[], SocksLink * sl)
       {"listen",        required_argument, 0, 'l'},
       {"interface",     required_argument, 0, 'i'},
       {"port",          required_argument, 0, 'p'},
-      {"pipe",          no_argument, 0, 'P'},
+      {"max-fds",       required_argument, 0, 'd'},
+      {"pipe",          no_argument,       0, 'P'},
       {"helper",        required_argument, 0, 'H'},
-      {"helper-max",    required_argument, 0, 'j'},
+      {"helpers-max",   required_argument, 0, 'j'},
       {"method",        required_argument, 0, 'm'},
       {"next-hop",      required_argument, 0, 'n'},
       {"help",          no_argument,       0, 'h'},
@@ -184,7 +208,7 @@ int parse_args(int argc, char *argv[], SocksLink * sl)
     int option_index = 0;
     char c;
 
-    c = getopt_long(argc, argv, "Dvqu:g:i:l:p:H:j:Pm:n:b:hV",
+    c = getopt_long(argc, argv, "Dvqu:g:i:l:p:H:j:Pd:m:n:b:hV",
 		    long_options, &option_index);
 
     if (c == -1)
@@ -246,6 +270,11 @@ int parse_args(int argc, char *argv[], SocksLink * sl)
 
     case 'j':
       if (parse_helpers_max(sl, optarg))
+	goto error;
+      break;
+
+    case 'd':
+      if (parse_fd_max(sl, optarg))
 	goto error;
       break;
 

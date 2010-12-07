@@ -52,6 +52,7 @@ struct sockslink {
   const char *username;
   const char *groupname;
   bool exiting;
+  bool cores;
 
   /* Network config */
   const char *iface;
@@ -71,6 +72,7 @@ struct sockslink {
 
   /* Clients */
   struct list_head clients;
+  int fds_max;
 
   /* Helpers */
   const char *helper_command;
