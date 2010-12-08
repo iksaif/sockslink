@@ -273,6 +273,7 @@ static int parse_arg(SocksLink *sl, int c, char *optarg)
 
   case 'P':
     sl->pipe = true;
+    break;
 
   case 'p':
     if (parse_port(sl, optarg))

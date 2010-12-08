@@ -6,6 +6,7 @@
 
 #include <stdbool.h>
 #include <event.h>
+#include "event-compat.h"
 
 #include "list.h"
 

@@ -1,5 +1,10 @@
 #cmakedefine SOCKSLINK_VERSION	"@SOCKSLINK_VERSION@"
 #cmakedefine HAVE_IPV6
+#cmakedefine HAVE_EVENT_BASE_LOOPBREAK
+#cmakedefine HAVE_EVENT_BASE_NEW
+#cmakedefine HAVE_BUFFEREVENT_SETCB
+#cmakedefine HAVE_BUFFEREVENT_SETWATERMARK
+#cmakedefine HAVE_BUFFEREVENT_SETWATERMARK_PROTO
 
 /*
  * number of second the client have to finish the authentication
