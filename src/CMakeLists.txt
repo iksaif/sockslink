@@ -27,3 +27,5 @@ set(sockslink_SRCS
 
 add_executable(sockslinkd ${sockslink_SRCS})
 target_link_libraries(sockslinkd event)
+
+install(TARGETS sockslinkd RUNTIME DESTINATION sbin)

@@ -1,0 +1,13 @@
+Source: sockslink
+Section: universe/net
+Priority: extra
+Maintainer: Corentin Chary <cchary@commonit.com>
+Build-Depends: debhelper (>= 5)
+Standards-Version: 3.7.2
+
+Package: sockslink
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: simple SOCKS relay and reverse proxy (sockslinkd)
+ Provides sockslinkd, a deamon that relay incoming SOCKS
+ connections to real SOCKS proxies (or other sockslinkd instances).

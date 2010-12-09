@@ -1,0 +1,14 @@
+# Defaults for sockslink initscript
+# sourced by /etc/init.d/sockslink
+# installed at /etc/default/sockslink by the maintainer scripts
+
+#
+# This is a POSIX shell fragment
+#
+
+# Additional options that are passed to the Daemon.
+# See sockslinkd --help
+DAEMON_OPTS=""
+
+# Remove this line to enable sockslinkd
+DAEMON_NO_CONFIGURED=1

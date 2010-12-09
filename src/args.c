@@ -328,8 +328,8 @@ static int parse_conf(SocksLink *sl, const char *filename)
   char *val;
 
   if (!fp) {
-    pr_infos(sl, "can't open configuration file '%s': %s", filename,
-	     strerror(errno));
+    pr_warn(sl, "can't open configuration file '%s': %s", filename,
+	    strerror(errno));
     return -1;
   }
 
