@@ -46,7 +46,7 @@ static void usage(void)
 	  "                            \"none\" and \"username\" methods are available\n"
 	  "\n"
 	  "  -D, --foreground          don't go to background (default: go to background)\n"
-	  "      --pidfile=<file>      write the pid in this file (default: /var/run/sockslinkd.pid)",
+	  "      --pidfile=<file>      write the pid in this file (default: /var/run/sockslinkd.pid)"
 	  "  -u, --user=<username>     change to this user after startup\n"
 	  "  -g, --group=<group>       change to this group after startup\n"
 	  "  -v, --verbose             be more verbose\n"
