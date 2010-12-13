@@ -31,6 +31,7 @@ static LIST_HEAD(servers);
 static void sig_sigaction(int sig, siginfo_t *infos, void *ctx)
 {
   SocksLink *sl = NULL;
+  int old_errno = errno;
 
   switch (sig) {
   case SIGINT:
@@ -64,6 +65,8 @@ static void sig_sigaction(int sig, siginfo_t *infos, void *ctx)
   default: /* Ignore */
     break ;
   }
+
+  errno = old_errno;
 }
 
 static int setup_sigactions(void)
