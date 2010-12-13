@@ -73,22 +73,24 @@ force_stop() {
     return 0
 }
 
-case "$1" in
-  start)
+do_start() {
 	log_daemon_msg "Starting $DESC"
 
 	if running; then
 		log_failure_msg "(already running)"
 		log_end_msg 1
-		exit 0
+		return 0
 	fi
 
 	start-stop-daemon --start --quiet --pidfile $PIDFILE \
-		--exec $DAEMON -- $DAEMON_OPTS
+		--exec $DAEMON -- --pidfile $PIDFILE $DAEMON_OPTS
 	RC=$?
 	log_end_msg $RC
-	;;
-  stop)
+	return $RC
+}
+
+do_stop()
+{
 	log_daemon_msg "Stopping $DESC"
 	start-stop-daemon --stop --quiet --pidfile $PIDFILE \
 		--exec $DAEMON
@@ -104,6 +106,15 @@ case "$1" in
 		rm -f $PIDFILE
 		log_end_msg 0
 	fi
+	return $RC
+}
+
+case "$1" in
+  start)
+	do_start
+	;;
+  stop)
+	do_stop
 	;;
   force-stop)
 	log_daemon_msg "Forcefully stopping $DESC"
@@ -116,20 +127,10 @@ case "$1" in
 		$PIDFILE --exec $DAEMON
 	log_end_msg $?
 	;;
-  force-reload)
-	start-stop-daemon --stop --test --quiet --pidfile \
-		$PIDFILE --exec $DAEMON \
-	&& $0 restart \
-	|| exit 0
-	;;
   restart)
-    log_daemon_msg "Restarting $DESC"
-	start-stop-daemon --stop --quiet --pidfile \
-		$PIDFILE --exec $DAEMON
+	do_stop
 	[ -n "$DODTIME" ] && sleep $DODTIME
-	start-stop-daemon --start --quiet --pidfile \
-		$PIDFILE --exec $DAEMON -- $DAEMON_OPTS
-	log_end_msg $?
+	do_start
 	;;
   status)
         echo -n "$DESC is "
