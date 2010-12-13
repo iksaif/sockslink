@@ -41,4 +41,9 @@
 /*
  * Path of default config file
  */
-#define SOCKSLINK_CONF_FILE	"/etc/socks/sockslinkd.conf"
+#define SOCKSLINKD_CONF_FILE	"/etc/socks/sockslinkd.conf"
+
+/*
+ * Path of default pid file
+ */
+#define SOCKSLINKD_PID_FILE	"/var/run/sockslinkd.pid"

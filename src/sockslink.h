@@ -55,6 +55,8 @@ struct sockslink {
   bool exiting;
   bool cores;
   const char *conf;
+  const char *pid;
+  int pidfd;
 
   /* Network config */
   const char *iface;

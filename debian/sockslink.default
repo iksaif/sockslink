@@ -11,4 +11,4 @@
 DAEMON_OPTS=""
 
 # Remove this line to enable sockslinkd
-DAEMON_NO_CONFIGURED=1
+DAEMON_NOT_CONFIGURED=1

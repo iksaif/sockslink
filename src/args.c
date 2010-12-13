@@ -46,6 +46,7 @@ static void usage(void)
 	  "                            \"none\" and \"username\" methods are available\n"
 	  "\n"
 	  "  -D, --foreground          don't go to background (default: go to background)\n"
+	  "      --pidfile=<file>      write the pid in this file (default: /var/run/sockslinkd.pid)",
 	  "  -u, --user=<username>     change to this user after startup\n"
 	  "  -g, --group=<group>       change to this group after startup\n"
 	  "  -v, --verbose             be more verbose\n"
@@ -198,6 +199,14 @@ static int parse_arg(SocksLink *sl, int c, char *optarg)
     sl->conf = strdup(optarg);
     break;
 
+  case 't':
+    if (sl->pid) {
+      pr_err(sl, "pid file already set");
+      goto error;
+    }
+    sl->pid = strdup(optarg);
+    break;
+
   case 'D':
     sl->fg = true;
     break;
@@ -302,6 +311,7 @@ static struct option long_options[] =
   {
     {"conf",          no_argument,       0, 'c'},
     {"foreground",    no_argument,       0, 'D'},
+    {"pidfile",       required_argument, 0, 't'},
     {"verbose",       no_argument,       0, 'v'},
     {"quiet",         no_argument,       0, 'q'},
     {"user",          required_argument, 0, 'u'},
@@ -375,7 +385,7 @@ int parse_args(int argc, char *argv[], SocksLink * sl)
     int option_index = 0;
     int c;
 
-    c = getopt_long(argc, argv, "c:Dvqu:g:i:l:p:H:j:Pd:m:n:b:hV",
+    c = getopt_long(argc, argv, "t:c:Dvqu:g:i:l:p:H:j:Pd:m:n:b:hV",
 		    long_options, &option_index);
 
     if (c == -1)
@@ -386,9 +396,12 @@ int parse_args(int argc, char *argv[], SocksLink * sl)
   }
 
   if (!sl->conf)
-    sl->conf = strdup(SOCKSLINK_CONF_FILE);
+    sl->conf = strdup(SOCKSLINKD_CONF_FILE);
 
   parse_conf(sl, sl->conf);
+
+  if (!sl->pid && !sl->fg)
+    sl->pid = strdup(SOCKSLINKD_PID_FILE);
 
   if (sl->pipe && sl->helper_command) {
     pr_err(sl, "You can't use --pipe with --helper");

@@ -3,6 +3,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <sys/fcntl.h>
+#include <sys/stat.h>
 
 #include <netinet/in.h>
 #include <net/if.h>
@@ -13,6 +15,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <signal.h>
+#include <stdio.h>
 
 #include "sockslink.h"
 #include "client.h"
@@ -310,6 +313,37 @@ int sockslink_start(SocksLink *sl)
     return -1;
   }
 
+  if (sl->pid) {
+    ret = open(sl->pid, O_WRONLY | O_CREAT | O_EXCL | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+    if (ret == -1) {
+      struct stat st;
+
+      if (errno != EEXIST) {
+	pr_err(sl, "opening pid-file failed: %s", strerror(errno));
+	return -1;
+      }
+
+      if (stat(sl->pid, &st) != 0) {
+	pr_err(sl, "stating existing pid-file failed: %s", strerror(errno));
+	return -1;
+      }
+
+      if (!S_ISREG(st.st_mode)) {
+	pr_err(sl, "pid-file exists and isn't regular file: %s", strerror(errno));
+	return -1;
+      }
+
+      ret = open(sl->pid, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+      if (ret == -1) {
+	pr_err(sl, "opening pid-file failed: %s", strerror(errno));
+	return -1;
+      }
+    }
+
+    sl->pidfd = ret;
+  }
+
   if (!sl->fg) {
     ret = daemonize();
     if (ret) {
@@ -325,6 +359,14 @@ int sockslink_start(SocksLink *sl)
 	   sl->groupname ? sl->groupname : "<none>",
 	   strerror(errno));
     return -1;
+  }
+
+  if (sl->pid) {
+    FILE *fp = fdopen(sl->pidfd, "w");
+
+    fprintf(fp, "%d", getpid());
+    fclose(fp);
+    sl->pidfd = -1;
   }
 
   for (int i = 0; i < n; ++i) {
