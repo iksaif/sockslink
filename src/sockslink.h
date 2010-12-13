@@ -82,6 +82,7 @@ struct sockslink {
   const char *helper_command;
   int helpers_max;
   int helpers_running;
+  bool helpers_reload;
   struct list_head helpers;
   struct event helper_refill_event;
 

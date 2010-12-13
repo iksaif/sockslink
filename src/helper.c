@@ -493,6 +493,19 @@ static void on_helpers_refill(int fd, short event, void *ctx)
   SocksLink *sl = ctx;
   int ret = 0;
 
+  if (sl->helpers_reload) {
+    Helper *helper, *tmp;
+
+    pr_debug(sl, "reloading all helpers");
+
+    list_for_each_entry_safe(helper, tmp, &sl->helpers, next, Helper)
+      helper_stop(helper);
+
+    sl->helpers_reload = false;
+  }
+
+  pr_debug(sl, "refill helper pool (%d/%d)", sl->helpers_running, sl->helpers_max);
+
   for (int i = sl->helpers_running; i < sl->helpers_max; ++i)
     ret |= helper_start(sl);
 

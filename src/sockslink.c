@@ -55,6 +55,12 @@ static void sig_sigaction(int sig, siginfo_t *infos, void *ctx)
       }
     }
     break ;
+  case SIGHUP:
+    list_for_each_entry(sl, &servers, next, SocksLink) {
+      sl->helpers_reload = true;
+      helpers_refill_pool(sl);
+    }
+    break ;
   default: /* Ignore */
     break ;
   }
@@ -75,6 +81,7 @@ static int setup_sigactions(void)
   sigaddset(&sa.sa_mask, SIGPIPE);
   sigaddset(&sa.sa_mask, SIGCHLD);
   sigaddset(&sa.sa_mask, SIGINT);
+  sigaddset(&sa.sa_mask, SIGHUP);
 
   sa.sa_flags = SA_NOCLDSTOP|SA_SIGINFO;
   sa.sa_sigaction = sig_sigaction;
@@ -87,6 +94,10 @@ static int setup_sigactions(void)
     goto error;
 
   ret = sigaction(SIGINT, &sa, NULL);
+  if (ret)
+    goto error;
+
+  ret = sigaction(SIGHUP, &sa, NULL);
   if (ret)
     goto error;
 
