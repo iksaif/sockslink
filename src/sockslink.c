@@ -62,6 +62,64 @@ static void sig_sigaction(int sig, siginfo_t *infos, void *ctx)
       helpers_refill_pool(sl);
     }
     break ;
+  case SIGUSR1: /* Show current connections */
+    {
+      int i = 0;
+      Client *client;
+      Helper *helper;
+
+      list_for_each_entry(sl, &servers, next, SocksLink) {
+	fprintf(stdout, "sockslinkd #%d\n", i++);
+	fprintf(stdout, "==============\n");
+	fprintf(stdout, "listen on:\n");
+	for (int j = 0; j < SOCKSLINK_LISTEN_FD_MAX && sl->fd[j] != -1; ++j)
+	  fprintf(stdout, "%s:%s - #%d", sl->addresses[j],
+		  sl->port, sl->fd[j]);
+	fprintf(stdout, "\n");
+	fprintf(stdout, "configuration:\n");
+	fprintf(stdout, "--------------\n");
+	fprintf(stdout, "verbose:   %d\n", sl->verbose);
+	fprintf(stdout, "pipe:       %d\n", sl->pipe);
+	fprintf(stdout, "foreground: %d\n", sl->fg);
+	fprintf(stdout, "syslog:     %d\n", sl->syslog);
+	fprintf(stdout, "fd_max:     %d\n", sl->fds_max);
+	if (sl->username)
+	  fprintf(stdout, "username:   %s\n", sl->username);
+	if (sl->groupname)
+	fprintf(stdout, "groupname:  %s\n", sl->groupname);
+	fprintf(stdout, "cores:     %d\n", sl->cores);
+	if (sl->conf)
+	  fprintf(stdout, "conf:      %s\n", sl->conf);
+	if (sl->pid)
+	  fprintf(stdout, "pidfile:   %s\n", sl->pid);
+	fprintf(stdout, "iface:      %s\n", sl->iface);
+	fprintf(stdout, "port:       %s\n", sl->port);
+	fprintf(stdout, "methods:   ");
+	for (int j = 0; j < ARRAY_SIZE(sl->methods) &&
+ 	       sl->methods[j] != AUTH_METHOD_INVALID; ++j) {
+	  if (sl->methods[j] == AUTH_METHOD_NONE)
+	    fprintf(stdout, " none");
+	  if (sl->methods[j] == AUTH_METHOD_USERNAME)
+	    fprintf(stdout, " username");
+	}
+	fprintf(stdout, "\n");
+	fprintf(stdout, "clients:\n");
+	fprintf(stdout, "--------\n");
+	list_for_each_entry(client, &sl->clients, next, Client) {
+	  fprintf(stdout, "%d -> %d (%x %x %x)\n",
+		  client->client.fd, client->server.fd,
+		  client->close, client->authenticated, client->method);
+	}
+	fprintf(stdout, "helpers:\n");
+	fprintf(stdout, "--------\n");
+	list_for_each_entry(helper, &sl->helpers, next, Helper) {
+	  fprintf(stdout, "pid: %d (running: %x, dying: %x)\n",
+		  helper->pid, helper->running, helper->dying);
+	}
+	fprintf(stdout, "\n");
+      }
+    }
+    break ;
   default: /* Ignore */
     break ;
   }
@@ -85,6 +143,7 @@ static int setup_sigactions(void)
   sigaddset(&sa.sa_mask, SIGCHLD);
   sigaddset(&sa.sa_mask, SIGINT);
   sigaddset(&sa.sa_mask, SIGHUP);
+  sigaddset(&sa.sa_mask, SIGUSR1);
 
   sa.sa_flags = SA_NOCLDSTOP|SA_SIGINFO;
   sa.sa_sigaction = sig_sigaction;
@@ -101,6 +160,10 @@ static int setup_sigactions(void)
     goto error;
 
   ret = sigaction(SIGHUP, &sa, NULL);
+  if (ret)
+    goto error;
+
+  ret = sigaction(SIGUSR1, &sa, NULL);
   if (ret)
     goto error;
 
