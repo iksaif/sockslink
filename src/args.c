@@ -1,4 +1,5 @@
 #include <sys/stat.h>
+#include <sys/types.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,6 +7,7 @@
 #include <string.h>
 #include <getopt.h>
 #include <netdb.h>
+#include <ifaddrs.h>
 #include <unistd.h>
 
 #include "config.h"
@@ -27,9 +29,9 @@ static void usage(void)
   fprintf(stderr, "Relay socks connections\n"
 	  "\n"
 	  "Mandatory arguments to long options are mandatory for short options too.\n"
-#if defined(SO_BINDTODEVICE)
-	  "  -i, --interface=<iface>   listen on this interface (none)\n"
-#endif
+	  "  -i, --interface=<iface>   listen on this interface, similar to -l, but will\n"
+	  "                            try to listen on all addresses used by this interface.\n"
+	  "                            (default is none)\n"
 	  "  -l, --listen=<addr>       listen on this address  (default: 0.0.0.0 and ::)\n"
 	  "  -p, --port=<port>         TCP port (default: 1080)\n"
 	  "  -d, --max-fds=<num>       maximum number of file descriptor open\n"
@@ -114,18 +116,6 @@ static int parse_fd_max(SocksLink *sl, const char *optarg)
   return 0;
 }
 
-#if defined(SO_BINDTODEVICE)
-static int parse_interface(SocksLink *sl, const char *optarg)
-{
-  if (sl->iface) {
-    fprintf(stderr,  "error: listenning interface already set\n");
-    return -1;
-  }
-  sl->iface = strdup(optarg);
-  return 0;
-}
-#endif
-
 static int parse_addresses(SocksLink *sl, const char *optarg)
 {
   for (int i = 0; i < SOCKSLINK_LISTEN_FD_MAX; ++i)
@@ -136,6 +126,43 @@ static int parse_addresses(SocksLink *sl, const char *optarg)
 
   pr_err(sl, "can't listen on more than %d addresses", SOCKSLINK_LISTEN_FD_MAX);
   return -1;
+}
+
+static int parse_interface(SocksLink *sl, const char *optarg)
+{
+  struct ifaddrs ifa, *ifap = &ifa, *iface;
+  int ret = 0, family;
+  char host[NI_MAXHOST];
+
+  if (getifaddrs(&ifap) != 0) {
+    pr_err(sl, "getifaddrs() failed: %s", strerror(errno));
+    return -1;
+  }
+
+  for (iface = ifap; iface != NULL; iface = iface->ifa_next) {
+    if (strcmp(iface->ifa_name, optarg) == 0
+	&& iface->ifa_addr != NULL) {
+      family = iface->ifa_addr->sa_family;
+
+      if (family != AF_INET && family != AF_INET6)
+	continue ;
+
+      ret = getnameinfo(iface->ifa_addr,
+			(family == AF_INET) ? sizeof(struct sockaddr_in) :
+			sizeof(struct sockaddr_in6),
+			host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+      if (ret) {
+	pr_err(sl, "getnameinfo() failed: %s\n", gai_strerror(ret));
+	break ;
+      }
+      if (parse_addresses(sl, host)) {
+	ret = -1;
+	break ;
+      }
+    }
+  }
+  freeifaddrs(ifap);
+  return ret;
 }
 
 static int parse_method(SocksLink *sl, const char *optarg)
@@ -248,12 +275,10 @@ static int parse_arg(SocksLink *sl, int c, char *optarg)
       goto error;
     break;
 
-#if defined(SO_BINDTODEVICE)
   case 'i':
     if (parse_interface(sl, optarg))
       goto error;
     break;
-#endif
 
   case 'H':
     if (parse_helper(sl, optarg))
@@ -379,7 +404,7 @@ static int parse_conf(SocksLink *sl, const char *filename)
   return 0;
 }
 
-int parse_args(int argc, char *argv[], SocksLink * sl)
+int parse_args(int argc, char *argv[], SocksLink *sl)
 {
   while (1) {
     int option_index = 0;
@@ -431,7 +456,7 @@ int parse_args(int argc, char *argv[], SocksLink * sl)
   if (!sl->port)
     sl->port = strdup("1080");
 
-  if (!sl->addresses[0]) {
+  if (!sl->addresses[0] && !sl->iface) {
     sl->addresses[0] = strdup("0.0.0.0");
 #if defined(HAVE_IPV6)
     sl->addresses[1] = strdup("::");

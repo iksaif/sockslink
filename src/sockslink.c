@@ -361,15 +361,6 @@ int sockslink_start(SocksLink *sl)
 	goto error_continue;
       }
 
-#if defined(SO_BINDTODEVICE)
-      if (sl->iface)
-	ret = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, sl->iface, IF_NAMESIZE);
-      if (ret < 0) {
-	pr_err(sl, "can't bind to device %s: %s", sl->iface, strerror(errno));
-	goto error_continue;
-      }
-#endif
-
       ret = listen(fd, 5);
 
       if (ret < 0) {
