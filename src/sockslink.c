@@ -92,7 +92,6 @@ static void sig_sigaction(int sig, siginfo_t *infos, void *ctx)
 	  fprintf(stdout, "conf:      %s\n", sl->conf);
 	if (sl->pid)
 	  fprintf(stdout, "pidfile:   %s\n", sl->pid);
-	fprintf(stdout, "iface:      %s\n", sl->iface);
 	fprintf(stdout, "port:       %s\n", sl->port);
 	fprintf(stdout, "methods:   ");
 	for (int j = 0; j < ARRAY_SIZE(sl->methods) &&
@@ -211,7 +210,6 @@ void sockslink_clear(SocksLink *sl)
   free((char *)sl->username);
   free((char *)sl->groupname);
   free((char *)sl->conf);
-  free((char *)sl->iface);
   free((char *)sl->port);
   free((char *)sl->helper_command);
 

@@ -144,6 +144,7 @@ static int parse_interface(SocksLink *sl, const char *optarg)
 	&& iface->ifa_addr != NULL) {
       family = iface->ifa_addr->sa_family;
 
+#if defined(HAVE_IPV6)
       if (family != AF_INET && family != AF_INET6)
 	continue ;
 
@@ -151,6 +152,14 @@ static int parse_interface(SocksLink *sl, const char *optarg)
 			(family == AF_INET) ? sizeof(struct sockaddr_in) :
 			sizeof(struct sockaddr_in6),
 			host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+#else
+      if (family != AF_INET)
+	continue ;
+
+      ret = getnameinfo(iface->ifa_addr, sizeof(struct sockaddr_in) :
+			host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+#endif
+
       if (ret) {
 	pr_err(sl, "getnameinfo() failed: %s\n", gai_strerror(ret));
 	break ;
@@ -456,7 +465,7 @@ int parse_args(int argc, char *argv[], SocksLink *sl)
   if (!sl->port)
     sl->port = strdup("1080");
 
-  if (!sl->addresses[0] && !sl->iface) {
+  if (!sl->addresses[0]) {
     sl->addresses[0] = strdup("0.0.0.0");
 #if defined(HAVE_IPV6)
     sl->addresses[1] = strdup("::");

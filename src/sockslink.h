@@ -59,7 +59,6 @@ struct sockslink {
   int pidfd;
 
   /* Network config */
-  const char *iface;
   const char *port;
   const char *addresses[SOCKSLINK_LISTEN_FD_MAX];
   struct sockaddr_storage nexthop_addr;
