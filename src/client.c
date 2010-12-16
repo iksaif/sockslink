@@ -68,7 +68,7 @@ static void client_connect_server(Client *cl)
   }
 }
 
-static void client_invalid_version(Client *cl)
+void client_invalid_version(Client *cl)
 {
   static const uint8_t message[] = {SOCKS5_VER, AUTH_METHOD_INVALID};
 
@@ -190,7 +190,7 @@ static void on_client_read_init(struct bufferevent *bev, void *ctx)
 
   evbuffer_drain(bev->input, 2 + nmeth);
 
-  cl->method = method;
+  cl->client_method = method;
 
   if (method == AUTH_METHOD_NONE)
     client_connect_server(cl);
@@ -246,6 +246,8 @@ Client *client_new(SocksLink *sl, int fd, struct sockaddr_storage *addr,
 
   bufferevent_base_set(sl->base, bev);
 
+  cl->client_method = AUTH_METHOD_INVALID;
+  cl->server_method = AUTH_METHOD_INVALID;
   cl->parent = sl;
   cl->client.bufev = bev;
   cl->client.fd = fd;
@@ -277,7 +279,7 @@ void client_disconnect(Client *cl)
   if (bytes)
     cl->close = true;
   else {
-    if (!cl->authenticated && cl->method == AUTH_METHOD_USERNAME) {
+    if (!cl->authenticated && cl->client_method == AUTH_METHOD_USERNAME) {
       /* tsocks <= 1.8 will freeze if the socket is disconnected before
        * authentication results */
       client_auth_username_fail(cl);

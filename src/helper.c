@@ -123,10 +123,10 @@ static int helper_stop(Helper *helper)
 static void helper_parse_authentication(Helper *hl, Client *cl, int argc,
 					char *argv[])
 {
-  cl->method = AUTH_METHOD_INVALID;
+  cl->server_method = AUTH_METHOD_INVALID;
 
   if (!strcmp(argv[0], "none") && argc == 1) {
-    cl->method = AUTH_METHOD_NONE;
+    cl->server_method = AUTH_METHOD_NONE;
   } else if (!strcmp(argv[0], "username") && argc >= 1) {
     int ret;
 
@@ -149,10 +149,10 @@ static void helper_parse_authentication(Helper *hl, Client *cl, int argc,
     cl->auth.username.plen = ret;
 
   exit:
-    cl->method = AUTH_METHOD_USERNAME;
+    cl->server_method = AUTH_METHOD_USERNAME;
     return ;
   error:
-    cl->method = AUTH_METHOD_INVALID;
+    cl->server_method = AUTH_METHOD_INVALID;
     return ;
   }
 }
@@ -221,7 +221,7 @@ static void on_helper_read_ok(Helper *hl, Client *cl, char *buffer)
     client_disconnect(cl);
     return ;
   }
-  if (cl->method == AUTH_METHOD_INVALID) {
+  if (cl->server_method == AUTH_METHOD_INVALID) {
     prcl_err(cl, "helper[%d] did no provide a valid authentication method",
 	     hl->pid);
     client_disconnect(cl);
@@ -237,9 +237,7 @@ static void on_helper_read_err(Helper *hl, Client *cl, const char *error)
 
   pr_warn(sl, "helper[%d]: authentication error: %s", hl->pid, error);
 
-  if (cl->method == AUTH_METHOD_USERNAME)
-    client_auth_username_fail(cl);
-
+  /* client_disconnect will handle authentication specific failure */
   client_disconnect(cl);
 }
 
@@ -589,9 +587,9 @@ int helper_call(Client *client)
     bufferevent_write(bev, " ", 1);
   }
 
-  if (client->method == AUTH_METHOD_NONE)
+  if (client->client_method == AUTH_METHOD_NONE)
     bufferevent_write(bev, "none", 4);
-  if (client->method == AUTH_METHOD_USERNAME) {
+  if (client->client_method == AUTH_METHOD_USERNAME) {
     char buf[255 * 3 + 1]; /* worst case */
     size_t bytes;
 

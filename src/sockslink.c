@@ -106,9 +106,10 @@ static void sig_sigaction(int sig, siginfo_t *infos, void *ctx)
 	fprintf(stdout, "clients:\n");
 	fprintf(stdout, "--------\n");
 	list_for_each_entry(client, &sl->clients, next, Client) {
-	  fprintf(stdout, "%d -> %d (%x %x %x)\n",
+	  fprintf(stdout, "%d -> %d (close: %x, authenticated: %x, cmethod: %x, smethod: %x)\n",
 		  client->client.fd, client->server.fd,
-		  client->close, client->authenticated, client->method);
+		  client->close, client->authenticated,
+		  client->client_method, client->server_method);
 	}
 	fprintf(stdout, "helpers:\n");
 	fprintf(stdout, "--------\n");

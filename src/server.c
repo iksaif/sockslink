@@ -55,14 +55,16 @@ static void on_server_auth_username(struct bufferevent *bev, void *ctx)
   prcl_trace(cl, "username authentication result: %#x %#x", ver, result);
 
   if (ver != 0x01 || result != 0x00) {
-    client_auth_username_fail(cl);
+    if (cl->client_method == AUTH_METHOD_USERNAME)
+      client_auth_username_fail(cl);
     client_disconnect(cl);
     return ;
   }
 
   evbuffer_drain(EVBUFFER_INPUT(bev), 2);
 
-  client_auth_username_successful(cl);
+  if (cl->client_method == AUTH_METHOD_USERNAME)
+    client_auth_username_successful(cl);
 
   server_start_stream(cl);
   client_start_stream(cl);
@@ -106,8 +108,13 @@ static void on_server_negociate(struct bufferevent *bev, void *ctx)
   ver = buffer[0];
   method = buffer[1];
 
-  if (ver != SOCKS5_VER || method != cl->method) {
-    client_drop(cl);
+  /* Here, the client already negociated its authentication method with
+   * us, and the helper returned the appropriate new authentication method
+   * and parameters, so we can't really tell "bad authentification method".
+   * let client_disconnect() send a fake authentication specific failure
+   */
+  if (ver != SOCKS5_VER || method != cl->server_method) {
+    client_disconnect(cl);
     return ;
   }
 
@@ -116,6 +123,11 @@ static void on_server_negociate(struct bufferevent *bev, void *ctx)
   if (method == AUTH_METHOD_USERNAME) {
     server_auth_username(cl);
   } else {
+    /* If the client used a username, and is still waiting for
+     * a reply... */
+    if (cl->client_method == AUTH_METHOD_USERNAME)
+      client_auth_username_successful(cl);
+
     server_start_stream(cl);
     client_start_stream(cl);
   }
@@ -124,10 +136,10 @@ static void on_server_negociate(struct bufferevent *bev, void *ctx)
 static void server_negociate(Client *cl)
 {
   struct bufferevent *bev = cl->server.bufev;
-  uint8_t message[] = {SOCKS5_VER, 1, cl->method};
+  uint8_t message[] = {SOCKS5_VER, 1, cl->server_method};
 
   prcl_debug(cl, "sending negociation request to remote server (method: %#x)",
-	     cl->method);
+	     cl->server_method);
 
   bufferevent_disable(bev, EV_READ | EV_WRITE);
   bufferevent_settimeout(bev, SOCKS5_AUTH_TIMEOUT, SOCKS5_AUTH_TIMEOUT);
