@@ -9,11 +9,6 @@ DESC=sockslinkd
 
 test -x $DAEMON || exit 0
 
-if [ -n "${DAEMON_NOT_CONFIGURED}" -a "x${DAEMON_NOT_CONFIGURED}" != "x0" ]; then
-	echo "$DESC is not yet configured, please edit /etc/default/sockslink."
-	exit 0
-fi
-
 LOGDIR=/var/log/sockslink
 PIDFILE=/var/run/$NAME.pid
 DODTIME=2                   # Time to wait for the server to die, in seconds
@@ -24,6 +19,11 @@ DODTIME=2                   # Time to wait for the server to die, in seconds
 # Include sockslink defaults if available
 if [ -f /etc/default/sockslink ] ; then
 	. /etc/default/sockslink
+fi
+
+if [ -n "${DAEMON_NOT_CONFIGURED}" -a "x${DAEMON_NOT_CONFIGURED}" != "x0" ]; then
+	echo "$DESC is not yet configured, please edit /etc/default/sockslink."
+	exit 0
 fi
 
 running_pid()
