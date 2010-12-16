@@ -358,13 +358,13 @@ static int parse_conf(SocksLink *sl, const char *filename)
       *val = '\0';
       val++;
     }
-    if (val)
-      pr_trace(sl, "configuration: %s = '%s'", buffer, val);
-    else
-      pr_trace(sl, "configuration: %s", buffer, val);
-
     for (struct option *opt = long_options; opt->name; opt++) {
       if (!strcmp(buffer, opt->name)) {
+	if (val)
+	  pr_trace(sl, "configuration: %s = '%s'", buffer, val);
+	else
+	  pr_trace(sl, "configuration: %s", buffer, val);
+
 	if (opt->has_arg == no_argument && val)
 	  pr_err(sl, "%s doesn't take any argument", buffer);
 	else if (opt->has_arg == required_argument && !val)
@@ -419,7 +419,7 @@ int parse_args(int argc, char *argv[], SocksLink * sl)
   }
 
   if (!sl->helper_command && !sl->nexthop_addrlen) {
-    pr_err(sl, "You must specify --helper-command or --next-hop");
+    pr_err(sl, "You must specify --helper or --next-hop");
     return -1;
   }
 
